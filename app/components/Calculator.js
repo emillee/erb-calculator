@@ -1,7 +1,7 @@
 // @flow
 import React, { Component } from 'react';
 import { Link } from 'react-router-dom';
-import styles from './Counter.css';
+import styles from './Calculator.css';
 import routes from '../constants/routes';
 
 type Props = {
@@ -16,7 +16,6 @@ type Props = {
 // handle +/-
 // handle +/-
 
-
 export default class Counter extends Component<Props> {
   props: Props;
 
@@ -24,9 +23,9 @@ export default class Counter extends Component<Props> {
     super(props);
     this.state = {
       digitToDisplay: 0,
-      currentDigit: 0,
-      priorDigit: 0,
-      runningSum: 0,
+      currentDigit: '',
+      priorDigit: '',
+      runningSum: '',
       lastKeypressType: '',
       currentOperation: '',
       priorOperation: '',
@@ -35,8 +34,12 @@ export default class Counter extends Component<Props> {
     this.handleButtonPress = this.handleButtonPress.bind(this);
     this.handleDigitInput = this.handleDigitInput.bind(this);
     this.addNewDigitToCurrentDigit = this.addNewDigitToCurrentDigit.bind(this);
-    this.performLastOperation = this.performLastOperation.bind(this);
+    this.performOperation = this.performOperation.bind(this);
     this.resetSettings = this.resetSettings.bind(this);
+    this.completeOrderOfOps = this.completeOrderOfOps.bind(this);
+    this.setupOrderofOps = this.setupOrderofOps.bind(this);
+    this.isHigherOrderOp = this.isHigherOrderOp.bind(this);
+    this.isLowerOrderOp = this.isLowerOrderOp.bind(this);
   }
 
   componentDidMount() {
@@ -46,16 +49,19 @@ export default class Counter extends Component<Props> {
   resetSettings() {
     this.setState({
       digitToDisplay: 0,
-      currentDigit: 0,
-      priorDigit: 0,
-      runningSum: 0,
+      currentDigit: '',
+      priorDigit: '',
+      runningSum: '',
       lastKeypressType: '',
       currentOperation: '',
       priorOperation: '',
     });
   }
 
-  handleButtonPress(button) {
+  handleButtonPress(e, button) {
+    e.preventDefault();
+    e.stopPropagation();
+
     switch (true) {
       case this.props.allDigits.indexOf(button) > -1:
         this.handleDigitInput(button);
@@ -64,18 +70,84 @@ export default class Counter extends Component<Props> {
         if (this.state.lastKeypressType === 'operation') {
           this.setState({ currentOperation: button });
         } else {
-          this.handleOperationInput(button);  
+          if (this.canCompletePriorOrderOfOps()) {
+            this.completeOrderOfOps(button);
+          } else if (this.requiresOrderOfOperations(button)) {
+            this.setupOrderofOps(button);
+          } else {
+            this.handleOperationInput(button)  
+          }
         }
         return;
     }
   }
 
-  performLastOperation(operationStr) {
+  completeOrderOfOps(operationStr) {
+    var resultOfHigherOrderOfOp = this.performOperation(
+      this.state.currentOperation,
+      this.state.priorDigit,
+      this.state.currentDigit
+    )
+
+    var resultOfLowerOrderOfOp = this.performOperation(
+      this.state.priorOperation,
+      this.state.runningSum,
+      resultOfHigherOrderOfOp
+    )
+
+    this.setState({
+      digitToDisplay: resultOfLowerOrderOfOp,
+      runningSum: resultOfLowerOrderOfOp,
+      currentDigit: 0,
+      priorDigit: '',
+      priorOperation: '',
+      currentOperation: operationStr,
+      lastKeypressType: 'operation',
+    })    
+  }
+
+  canCompletePriorOrderOfOps() {
+    return this.state.currentDigit &&
+      this.state.priorDigit &&
+      this.state.currentOperation &&
+      this.state.priorOperation;
+  }
+
+  isHigherOrderOp(operationStr) {
+    return ['*', '/'].indexOf(operationStr) > -1;
+  }
+
+  isLowerOrderOp(operationStr) {
+    return ['+', '-'].indexOf(operationStr) > -1;
+  }  
+
+  requiresOrderOfOperations(operationStr) {
+    return this.isHigherOrderOp(operationStr) && 
+      this.isLowerOrderOp(this.state.currentOperation);
+  }
+
+  setupOrderofOps(operationStr) {
+    this.setState({
+      priorDigit: this.state.currentDigit,
+      priorOperation: this.state.currentOperation
+    }, function() {
+      this.setState({
+        currentDigit: 0,
+        currentOperation: operationStr
+      })
+    });  
+  }
+
+  performOperation(operationStr, firstNum, secondNum) {
     switch (operationStr) {
       case '+':
-        return this.state.runningSum + this.state.currentDigit;
+        return firstNum + secondNum;
       case '*':
-        return this.state.runningSum * this.state.currentDigit;
+        return firstNum * secondNum;
+      case '/':
+        return firstNum / secondNum;
+      case '-':
+        return firstNum - secondNum;        
     }
   };
 
@@ -87,47 +159,71 @@ export default class Counter extends Component<Props> {
       return;
     }
 
-    switch (operationStr) {
-      case '+':
-        const newSum = this.performLastOperation(this.state.currentOperation)
-        this.setState({
-          runningSum: newSum,
-          digitToDisplay: newSum,
-          currentOperation: operationStr
-        })
+    if (operationStr === '=') {
+      if (this.state.currentOperation && this.currentOperation !== '=') {
+        this.handleOperationInput(this.state.currentOperation);
+      }
+    } else {
+      const newSum = this.performOperation(
+        this.state.currentOperation,
+        this.state.runningSum,
+        this.state.currentDigit
+      )
 
-        return;
-      case '*':
-        const newMultiplyResult = this.performLastOperation(this.state.currentOperation)
-        console.log(newMultiplyResult)
-
-        this.setState({
-          runningSum: newMultiplyResult,
-          digitToDisplay: newMultiplyResult,
-          currentOperation: operationStr
-        })
-        return;
-      // case '-':
-      //   this.setState({
-      //     currentDigit: this.state.currentDigit - this.state.runningSum,
-      //     priorDigit: 0,
-      //     currentOperation: operationStr
-      //   });
-      //   return;  
-      // case '/':
-      //   this.setState({
-      //     currentDigit: this.state.currentDigit / this.state.runningSum,
-      //     priorDigit: 0,
-      //     currentOperation: operationS tr
-      //   });
-      //   return;                
-      case '=':
-        if (this.state.currentOperation && this.currentOperation !== '=') {
-          this.handleOperationInput(this.state.currentOperation);
-        }
-        return;
-
+      this.setState({
+        runningSum: newSum,
+        digitToDisplay: newSum,
+        currentOperation: operationStr
+      })      
     }
+
+    // switch (operationStr) {
+    //   case '+':
+    //     const newSum = this.performOperation(
+    //       this.state.currentOperation,
+    //       this.state.runningSum,
+    //       this.state.currentDigit
+    //     )
+
+    //     this.setState({
+    //       runningSum: newSum,
+    //       digitToDisplay: newSum,
+    //       currentOperation: operationStr
+    //     })
+
+    //     return;
+    //   case '*':
+    //     const newMultiplyResult = this.performOperation(
+    //       this.state.currentOperation,
+    //       this.state.runningSum,
+    //       this.state.currentDigit
+    //     )
+
+    //     this.setState({
+    //       runningSum: newMultiplyResult,
+    //       digitToDisplay: newMultiplyResult,
+    //       currentOperation: operationStr
+    //     })
+    //     return;
+    //   // case '-':
+    //   //   this.setState({
+    //   //     currentDigit: this.state.currentDigit - this.state.runningSum,
+    //   //     priorDigit: 0,
+    //   //     currentOperation: operationStr
+    //   //   });
+    //   //   return;  
+    //   // case '/':
+    //   //   this.setState({
+    //   //     currentDigit: this.state.currentDigit / this.state.runningSum,
+    //   //     priorDigit: 0,
+    //   //     currentOperation: operationS tr
+    //   //   });
+    //   //   return;                
+    //   case '=':
+
+    //     return;
+
+    // }
 
   }
 
@@ -170,8 +266,7 @@ export default class Counter extends Component<Props> {
 
   static defaultProps = {
     allDigits: [0,1,2,3,4,5,6,7,8,9],
-    // '/', '-', 
-    allOperations: ['+', '*', '=']
+    allOperations: ['+', '*', '/', '-', '=']
   }
 
   render() {
@@ -189,36 +284,39 @@ export default class Counter extends Component<Props> {
             <i className="fa fa-arrow-left fa-3x" />
           </Link>
 
-          <div>
-            <input type="number"
-              ref="digitDisplay" 
-              value={this.state.digitToDisplay} 
-              disabled />
-          </div>
+          <div className={styles.calcWrap}>
 
-          <div>
-            <button key="AC"
-              onClick={(e) => this.resetSettings() }>
-              AC
-            </button>
-          </div>
+            <div>
+              <input type="number"
+                className={styles.inputDisplay}
+                ref="digitDisplay" 
+                value={this.state.digitToDisplay} 
+                disabled />
+            </div>
 
-          <div>
+            <div>
+              <button key="AC"
+                onClick={(e) => this.resetSettings() }>
+                AC
+              </button>
+            </div>
+
             {allDigits.map(digit => 
               <button key={digit}
-                onClick={(e) => this.handleButtonPress(digit) }>
+                onClick={(e) => this.handleButtonPress(e, digit) }>
                 {digit}
               </button>
             )}
-          </div>
 
-          <div>
-            {allOperations.map(operation => 
-              <button key={operation}
-                onClick={(e) => this.handleButtonPress(operation) }>
-                {operation}
-              </button>
-            )}
+            <div>
+              {allOperations.map(operation => 
+                <button key={operation}
+                  onClick={(e) => this.handleButtonPress(e, operation) }>
+                  {operation}
+                </button>
+              )}
+            </div>
+
           </div>
         </div>
       </div>
